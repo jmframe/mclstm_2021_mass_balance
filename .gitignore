@@ -1,0 +1,5 @@
+*.pkl
+__pycache__
+results/*.pkl
+results/model_output_for_analysis/
+results/.ipynb_checkpoints/
