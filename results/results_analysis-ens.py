@@ -63,9 +63,8 @@ conversion_factor = 0.00328084 * 10763910.41671 / 3600 / 24
 
 
 ##########################################################################################################
-# Get a list of all the basins in the analysis
+# Get all the CAMELS attributes.  
 ##########################################################################################################
-#basin_list = list(lstm_results_time_split.keys())
 
 # Camels attributes with RI information
 dataName = '../data/camels_attributes.csv'
@@ -176,165 +175,6 @@ def calculate_all_metrics_for_frequency_analysis(analysis_dict, flows, recurranc
 
 
 ##########################################################################################################
-# PUT TOGETHER DATA FRAMES WITH THE STANDARD METRICS
-##########################################################################################################
-flows = ['nwm', 'lstm', 'mc', 'sac', 'obs']
-for forcing_type in ['nldas', 'daymet']:
-    print('Analyzing ',forcing_type)
-    #-------------------------------------------------------------------------------------------------
-    analysis_dict_names = {'time_split1':'frequency_analysis_dict_time_split1_{}_ens.pkl'.format(forcing_type),
-                           'time_split2':'frequency_analysis_dict_time_split2_{}_ens.pkl'.format(forcing_type)}
-    peak_flows_dict_names = {'time_split1':'peak_annual_flows_dict_time_split1_{}_ens.pkl'.format(forcing_type),
-                             'time_split2':'peak_annual_flows_dict_time_split2_{}_ens.pkl'.format(forcing_type)}
-    #-------------------------------------------------------------------------------------------------
-
-    
-    #-------------------------------------------------------------------------------------------------
-    #----------   If the calcs have been done, then just read them in.
-    if True:
-        with open(analysis_dict_names[train_split_type], 'rb') as fb:
-            analysis_dict_all = pkl.load(fb)
-        with open(peak_flows_dict_names[train_split_type], 'rb') as fb:
-            peak_flows_dict = pkl.load(fb)
-            
-    else:
-
-        for train_split_type in ['time_split1', 'time_split2']:
-            print('    Analyzing ',train_split_type)
-
-            #-------------------------------------------------------------------------------------------------
-            # Set up lists
-            if train_split_type == 'time_split1':
-                models = ['lstm', 'mc', 'sac']
-                flows = ['lstm', 'mc', 'sac', 'obs']
-            else:
-                models = ['nwm', 'lstm', 'mc', 'sac']
-                flows = ['nwm', 'lstm', 'mc', 'sac', 'obs']
-            #-------------------------------------------------------------------------------------------------
-
-            #-------------------------------------------------------------------------------------------------
-            # Place the data here
-            analysis_dict_all = {}
-            peak_flows_dict = {i:[] for i in models_obs_ri}
-            #-------------------------------------------------------------------------------------------------
-
-
-            #-------------------------------------------------------------------------------------------------
-            #-----LOOP THROUGH BASINS------------------------------------------------------------------------
-            #-------------------------------------------------------------------------------------------------
-
-            for ib, basin_0str in enumerate(basin_list): 
-                basin_int = int(basin_0str)
-
-                #-------------------------------------------------------------------------------------------------
-                # Get the NWM data for this basin in an xarray dataset.
-                xr_nwm = xr.DataArray(train_split_type_model_set[train_split_type]['nwm'][basin_0str]['streamflow'].values, 
-                         coords=[nwm_results[basin_0str]['streamflow'].index], 
-                         dims=['datetime'])
-                #-------------------------------------------------------------------------------------------------
-
-
-                #-------------------------------------------------------------------------------------------------
-                # Setting up the dictionary for the single basin results. Then will add to the overall dict.
-                analysis_dict = {metric:{model:[] for model in models_ri} for metric in metrics.get_available_metrics()}
-                extra_metrics = ['beta-abs', 'peakQ', 'peakRI', 'peakT', 'peakQ-perc', 'peakRI-perc', 'peakT-abs']
-                for extra_metric in extra_metrics:
-                    analysis_dict[extra_metric] = {model:[] for model in models_ri}
-                #-------------------------------------------------------------------------------------------------
-
-
-                #-------------------------------------------------------------------------------------------------
-                # We need the basin area to convert to CFS, to interpolate the RI from LPIII
-                basin_area = pd_attributes.loc[basin_int, 'area_geospa_fabric']
-                basin_str = tools.gauge_id_str(basin_int)
-                #-------------------------------------------------------------------------------------------------
-
-
-                #-------------------------------------------------------------------------------------------------
-                # Get the log pearson III results
-                b17 = tools.read_b17(basin_str)
-                #-------------------------------------------------------------------------------------------------
-
-
-                #-------------------------------------------------------------------------------------------------
-                # Get the peak flows, but then cut them to just the validation year.
-                peakflows = tools.read_peak_flows(basin_str)
-                peakflows['wateryear'] = [int(tools.get_water_year(int(peakflows.iloc[i,0].split('-')[0]), 
-                                          int(peakflows.iloc[i,0].split('-')[1]))) for i in range(peakflows.shape[0])]
-                peakflows = pd.DataFrame(peakflows.set_index('wateryear'))
-                #-------------------------------------------------------------------------------------------------
-
-                #-------------------------------------------------------------------------------------------------
-                #----  LOOP THROUGH THE WATER YEARS   ------------------------------------------------------------
-                #-------------------------------------------------------------------------------------------------
-                for water_year in range(range_for_analysis[train_split_type][0], 
-                                        range_for_analysis[train_split_type][1]):
-                    date_from = str(water_year-1)+'-10'
-                    date_to = str(water_year)+'-09'
-
-                    #-------------------------------------------------------------------------------------------------
-                    # Figure out what the actual recurrence interval is for the basin-year. 
-                    # We'll use this to categorize the basin-year, but then calc the metrics with the observations.
-                    if water_year not in list(peakflows.index.values):
-                        #print("water year not in record")
-                        continue
-                    peak_date = peakflows.loc[water_year, 0]
-                    if isinstance(peakflows.loc[water_year, 1], str):
-                        peak_flow = float(peakflows.loc[water_year, 1].replace(" ", ""))
-                    else:
-                        peak_flow = peakflows.loc[water_year, 1]
-                    #-------------------------------------------------------------------------------------------------
-
-
-                    #-------------------------------------------------------------------------------------------------
-                    # Make dictionary with all the flows
-                    flow_mm = {}
-                    #-------------------------------------------------------------------------------------------------
-
-
-                    #-------------------------------------------------------------------------------------------------        
-                     # NWM data
-                    if train_split_type != 'time_split1':
-                        sim_nwm = xr_nwm.loc[date_from:date_to]
-                        # convert from CFS to mm/day
-                        # fm3/s * 3600 sec/hour * 24 hour/day / (m2 * mm/m)
-                        flow_mm['nwm'] = sim_nwm*3600*24/(basin_area*1000)
-                    #-------------------------------------------------------------------------------------------------
-                    # Standard LSTM 
-                    xrr = train_split_type_model_set[train_split_type]['lstm'][forcing_type][basin_0str]['1D']['xr']['QObs(mm/d)_sim']
-                    flow_mm['lstm'] = pd.DataFrame(data=xrr.values,index=xrr.date.values).loc[date_from:date_to]
-                    #-------------------------------------------------------------------------------------------------
-                    # Mass-conserving LSTM data trained on all years
-                    xrr = train_split_type_model_set[train_split_type]['mc'][forcing_type][basin_0str]['1D']['xr']['QObs(mm/d)_sim']
-                    flow_mm['mc'] = pd.DataFrame(data=xrr.values,index=xrr.date.values).loc[date_from:date_to]
-                    #-------------------------------------------------------------------------------------------------        
-                    # SACSMA 
-                    df = train_split_type_model_set[train_split_type]['sac'][forcing_type][basin_0str]
-                    flow_mm['sac'] = df.loc[date_from:date_to]
-                    #-------------------------------------------------------------------------------------------------
-                    # OBSERVATIONS
-                    xrr = train_split_type_model_set[train_split_type]['mc'][forcing_type][basin_0str]['1D']['xr']['QObs(mm/d)_obs']
-                    flow_mm['obs'] = pd.DataFrame(data=xrr.values,index=xrr.date.values).loc[date_from:date_to]
-                    #-------------------------------------------------------------------------------------------------
-
-                    #------------------------------------------------------------------------------------------------- 
-                    for iflow in models:
-                        analysis_dict['beta-abs'][iflow].append(np.abs(analysis_dict['Beta-NSE'][iflow][-1]))
-                    #-------------------------------------------------------------------------------------------------        
-
-                #-------------------------------------------------------------------------------------------------
-                #Now that the basin has been analyzed successfully, add it to the larger dictionary
-                analysis_dict_all[basin_0str] = analysis_dict
-                #------------------------------------------------------------------------------------------------- 
-
-            #-------------------------------------------------------------------------------------------------
-            with open(analysis_dict_names[train_split_type], 'wb') as fb:
-                pkl.dump(analysis_dict_all, fb)
-            with open(peak_flows_dict_names[train_split_type], 'wb') as fb:
-                pkl.dump(peak_flows_dict, fb)
-
-
-##########################################################################################################
 # REVERT TO THESE AS THE FLOWS
 ##########################################################################################################
 flows = ['lstm', 'mc', 'sac', 'obs']
@@ -362,7 +202,7 @@ total_mass = {forcing_type:{time_split:{} for time_split in ['time_split1', 'tim
     
 mass_basin_list={}
     
-for tsplt in ['time_split2', 'time_split1']:
+for tsplt in ['time_split1', 'time_split2']:
     print('tsplt', tsplt)
     for forcing_type in forcing_products:
 
@@ -434,16 +274,18 @@ for tsplt in ['time_split2', 'time_split1']:
             # Standard LSTM 
             if tsplt == 'time_split1':
                 xrr = lstm_results_time_split1[forcing_type][basin_0str]['1D']['xr']['QObs(mm/d)_sim'].loc[start_date:end_date]
+                flow_mm['lstm'] = pd.DataFrame(data=xrr.values,index=xrr.datetime.values)
             if tsplt == 'time_split2':
                 xrr = lstm_results_time_split2[forcing_type][basin_0str]['1D']['xr']['QObs(mm/d)_sim'].loc[start_date:end_date]
-            flow_mm['lstm'] = pd.DataFrame(data=xrr.values,index=xrr.date.values)
+                flow_mm['lstm'] = pd.DataFrame(data=xrr.values,index=xrr.date.values)
             #-------------------------------------------------------------------------------------------------
             # Mass-conserving LSTM data trained on all years
             if tsplt == 'time_split1':
                 xrr = mclstm_results_time_split1[forcing_type][basin_0str]['1D']['xr']['QObs(mm/d)_sim'].loc[start_date:end_date]
+                flow_mm['mc'] = pd.DataFrame(data=xrr.values,index=xrr.datetime.values)
             if tsplt == 'time_split2':
                 xrr = mclstm_results_time_split2[forcing_type][basin_0str]['1D']['xr']['QObs(mm/d)_sim'].loc[start_date:end_date]
-            flow_mm['mc'] = pd.DataFrame(data=xrr.values,index=xrr.date.values)
+                flow_mm['mc'] = pd.DataFrame(data=xrr.values,index=xrr.date.values)
             #-------------------------------------------------------------------------------------------------
             # SACSMA Mean
             if tsplt == 'time_split1':
@@ -455,9 +297,10 @@ for tsplt in ['time_split2', 'time_split1']:
             # OBSERVATIONS
             if tsplt == 'time_split1':
                 xrr = mclstm_results_time_split1[forcing_type][basin_0str]['1D']['xr']['QObs(mm/d)_obs'].loc[start_date:end_date]
+                flow_mm['obs'] = pd.DataFrame(data=xrr.values,index=xrr.datetime.values)
             if tsplt == 'time_split2':
                 xrr = mclstm_results_time_split2[forcing_type][basin_0str]['1D']['xr']['QObs(mm/d)_obs'].loc[start_date:end_date]
-            flow_mm['obs'] = pd.DataFrame(data=xrr.values,index=xrr.date.values)
+                flow_mm['obs'] = pd.DataFrame(data=xrr.values,index=xrr.date.values)
             #-------------------------------------------------------------------------------------------------
             # FORCING
             forcing = pd.read_csv(forcing_dir+basin_0str+'_lump_{}_forcing_leap.txt'.format(file_name_map[forcing_type]), 
@@ -474,7 +317,7 @@ for tsplt in ['time_split2', 'time_split1']:
             # If there is missin observations than we can't compare the mass of the observed with simulaitons
             skip_basin_because_missing_obs = False
             if tsplt == 'time_split1':
-                obs_temp = mclstm_results_time_split1[forcing_type][basin_0str]['1D']['xr']['QObs(mm/d)_obs'].date
+                obs_temp = mclstm_results_time_split1[forcing_type][basin_0str]['1D']['xr']['QObs(mm/d)_obs'].datetime
             if tsplt == 'time_split2':
                 obs_temp = mclstm_results_time_split2[forcing_type][basin_0str]['1D']['xr']['QObs(mm/d)_obs'].date
                 
@@ -553,11 +396,11 @@ for tsplt in ['time_split2', 'time_split1']:
 
 # _______________________________________________________________________
 # Save the mass balance results.
-with open('total_mass_error_ens.pkl', 'wb') as fb:
+with open('total_mass_error_ens_slurm.pkl', 'wb') as fb:
     pkl.dump(total_mass_error, fb)
-with open('total_mass_ens.pkl', 'wb') as fb:
+with open('total_mass_ens_slurm.pkl', 'wb') as fb:
     pkl.dump(total_mass, fb)
-with open('cumulative_mass_all_ens.pkl', 'wb') as fb:
+with open('cumulative_mass_all_ens_slurm.pkl', 'wb') as fb:
     pkl.dump(cumulative_mass_all, fb)
 
 
