@@ -4,3 +4,5 @@ __pycache__
 results/*.pkl
 results/model_output_for_analysis/
 results/.ipynb_checkpoints/
+z_old/
+z_old/*

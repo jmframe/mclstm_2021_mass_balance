@@ -6,7 +6,7 @@ import copy
 import os
 import sys
 import metrics
-
+from sklearn.metrics import mutual_info_score
 print("XArray version: ", xr.__version__)
 
 
@@ -120,12 +120,21 @@ np.warnings.filterwarnings('ignore', category=np.VisibleDeprecationWarning)
 
 
 ##########################################################################################################
+# Most of the metricts we want to calculate are available in NeuralHydrology.
+# But we also want to calculate the mutual information. So we have to add that.
+loop_these_metrics = metrics.get_available_metrics()
+loop_these_metrics.append("mi")
+##########################################################################################################
+def calc_MI(x, y, bins):
+    c_xy = np.histogram2d(x, y, bins)[0]
+    mi = mutual_info_score(None, None, contingency=c_xy)
+    return mi
 ##########################################################################################################
 def calculate_all_metrics_for_frequency_analysis(analysis_dict, flows, recurrance_interval):
 
     sims = list(flows.keys())[:-1]
 
-    for metric in metrics.get_available_metrics():
+    for metric in loop_these_metrics:
 
         score = {sim:0 for sim in sims}
     
@@ -164,7 +173,8 @@ def calculate_all_metrics_for_frequency_analysis(analysis_dict, flows, recurranc
         if metric == 'FMS':
             for sim in sims:
                 score[sim] = metrics.fdc_fms(flows['obs'],flows[sim])
-
+        if metric == "mi":
+                score[sim] = calc_MI(flows['obs'],flows[sim], 100)
         for sim in sims:
             analysis_dict[metric][sim].append(score[sim])
 
