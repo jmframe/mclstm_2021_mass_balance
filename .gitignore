@@ -1,6 +1,9 @@
 *.log
 *.pkl
 __pycache__
+*.tar.gz
+runs/*
+results/.tar.gz
 results/*.pkl
 results/model_output_for_analysis/
 results/.ipynb_checkpoints/
