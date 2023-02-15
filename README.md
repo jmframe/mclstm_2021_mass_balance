@@ -10,6 +10,8 @@ This is the script to do the mass balance and subsequent mass balance error calc
 This is the script to make the tables with the standard time series metrics.
 ## make_figures.ipynb
 This is the script to make the figures based on the cummulative mass balance.
+## supplimental_analysis_from_review2_not_for_peer_review.pdf
+This is a file with some figures and some text reguarding the additional analyses for the paper revisions. The results shown in this file is not for peer review.
 # Data
 This directory just has the CAMELS attributes and the USGS gauge information that is used in the analysis. All the forcing data are hosted on the [main CAMELS website](https://ral.ucar.edu/solutions/products/camels), no need for us to host them again. The model results are hosted on CUAHSI Hydroshare (link coming soon).
 # Figs

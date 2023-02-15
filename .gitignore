@@ -7,5 +7,7 @@ results/.tar.gz
 results/*.pkl
 results/model_output_for_analysis/
 results/.ipynb_checkpoints/
+figs/hydrographs/
+figs/hydrographs/*
 z_old/
 z_old/*
